@@ -10,7 +10,7 @@ import { FetchGroupMemberListPage } from '@snowluma/protocol/oidb-services/conta
 import {
     FetchGroupRequests,
     FetchGroupRequestsByUid,
-    groupRequestOperationType,
+    groupRequestNotifyType,
 } from '@snowluma/protocol/oidb-services/contacts/fetch-group-requests';
 import {
     FetchRobotUinRanges,
@@ -460,16 +460,16 @@ export class ContactsApi {
                 this.ctx.identity.findUidByUin(operatorUin, groupId) ||
                 this.ctx.identity.findUidByUin(operatorUin) ||
                 '';
-            const notifyType = raw.eventType ?? 0;
-            const operationType = groupRequestOperationType(notifyType);
+            const eventType = raw.eventType ?? 0;
+            const notifyType = groupRequestNotifyType(eventType);
             const sequence = normalizeGroupRequestSequence(raw.sequence, groupId);
 
-            if (operationType === null) {
+            if (notifyType === null) {
                 log.warn(
-                    'unsupported group-request notification type: group=%d sequence=%s type=%d',
+                    'unsupported group-request wire type: group=%d sequence=%s type=%d',
                     groupId,
                     String(raw.sequence ?? 0n),
-                    notifyType,
+                    eventType,
                 );
             }
 
@@ -499,8 +499,8 @@ export class ContactsApi {
                 operatorName: raw.operatorUser?.name ?? '',
                 sequence,
                 state: raw.state ?? 0,
-                notifyType,
-                eventType: operationType ?? 0,
+                notifyType: notifyType ?? 0,
+                eventType: notifyType === null ? 0 : eventType,
                 comment: raw.comment ?? '',
                 filtered,
                 operateTransInfo:
@@ -530,16 +530,16 @@ export class ContactsApi {
             const targetUid = raw.target?.uid ?? '';
             const invitorUid = raw.invitor?.uid ?? '';
             const operatorUid = raw.operatorUser?.uid ?? '';
-            const notifyType = raw.eventType ?? 0;
-            const operationType = groupRequestOperationType(notifyType);
+            const eventType = raw.eventType ?? 0;
+            const notifyType = groupRequestNotifyType(eventType);
             const sequence = normalizeGroupRequestSequence(raw.sequence, groupId);
 
-            if (operationType === null) {
+            if (notifyType === null) {
                 log.warn(
-                    'unsupported group-request notification type: group=%d sequence=%s type=%d',
+                    'unsupported group-request wire type: group=%d sequence=%s type=%d',
                     groupId,
                     String(raw.sequence ?? 0n),
-                    notifyType,
+                    eventType,
                 );
             }
 
@@ -566,8 +566,8 @@ export class ContactsApi {
                 operatorName: raw.operatorUser?.name ?? '',
                 sequence,
                 state: raw.state ?? 0,
-                notifyType,
-                eventType: operationType ?? 0,
+                notifyType: notifyType ?? 0,
+                eventType: notifyType === null ? 0 : eventType,
                 comment: raw.comment ?? '',
                 filtered,
                 operateTransInfo:

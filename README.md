@@ -33,6 +33,11 @@ SnowLuma 是面向 QQ 客户端的 TypeScript 互操作运行时，将 QQ 原生
 | WebUI 管理 | 账号状态、实时日志、连接配置、动作调试和存储管理 |
 | 开发者工具 | [`@snowluma/sdk`](packages/sdk/README.md) 与 [`@snowluma/mcp`](packages/mcp/README.md) |
 
+收到 QQ 加群申请通知后，SnowLuma 会查询待处理申请并上报 OneBot
+`post_type=request`、`request_type=group`、`sub_type=add` 事件，包含
+`group_id`、`user_id`、`comment` 和可直接传给 `set_group_add_request` 的 `flag`。
+此流程由通知触发，不定时轮询；查询失败或找不到匹配的待处理申请时会记录日志，不生成无效请求事件。
+
 ## 运行链路
 
 <p align="center">

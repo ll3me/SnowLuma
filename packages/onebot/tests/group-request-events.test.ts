@@ -2,12 +2,15 @@ import { deflateSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PacketInfo } from '@snowluma/common/protocol-types';
 import type { PushMsg } from '@snowluma/proto-defs/message';
-import type { GroupInvite } from '@snowluma/proto-defs/notify';
+import type { GroupInvite, GroupJoin } from '@snowluma/proto-defs/notify';
+import type { OidbBase, OidbSvcTrpcTcp0x10C0Response } from '@snowluma/proto-defs/oidb';
 import { protobuf_encode } from '@snowluma/proton';
 import { IdentityService } from '@snowluma/protocol/identity-service';
 import { MSG_PUSH_CMD } from '@snowluma/protocol/msg-push';
 import type { GroupInviteEvent } from '@snowluma/protocol/events';
 import type { GroupRequestInfo } from '@snowluma/protocol/qq-info';
+import { convertEvent } from '../src/event-converter';
+import { getGroupSystemMessages } from '../src/modules/contact-actions';
 import { handleGroupAddRequest } from '../src/modules/request-actions';
 import { Bridge } from '@snowluma/core/bridge';
 
@@ -181,30 +184,84 @@ describe('group request events', () => {
         expect(fetchRequests).not.toHaveBeenCalled();
     });
 
-    it('queries requests only after an incoming request notification', async () => {
+    it('reports an incoming join request with an actionable flag without polling (#597)', async () => {
         vi.useFakeTimers();
         const { bridge, received, fetchRequests } = setup();
-        fetchRequests.mockImplementation(async (filtered) => (filtered ? [] : [request()]));
+        vi.spyOn(bridge, 'sendRawPacket').mockImplementation(async (cmd) => ({
+            success: true,
+            gotResponse: true,
+            errorCode: 0,
+            errorMessage: '',
+            responseData: Buffer.from(
+                protobuf_encode<OidbBase<OidbSvcTrpcTcp0x10C0Response>>({
+                    body: {
+                        requests: cmd.endsWith('_1')
+                            ? [
+                                  {
+                                      sequence: 42n,
+                                      eventType: 1,
+                                      state: 1,
+                                      group: { groupUin: 999 },
+                                      target: { uid: 'u_applicant', name: 'applicant' },
+                                      comment: 'please',
+                                  },
+                              ]
+                            : [],
+                    },
+                }),
+            ),
+        }));
+        vi.spyOn(bridge.identity, 'resolveUin').mockResolvedValue(123);
+        const setAddRequest = vi.spyOn(bridge.apis.groupAdmin, 'setAddRequest').mockResolvedValue();
         await vi.advanceTimersByTimeAsync(60_000);
         expect(fetchRequests).not.toHaveBeenCalled();
-        bridge.registerCmd('test.request', () => [
-            {
-                kind: 'group_invite',
-                time: 1,
-                selfUin: 10001,
-                groupId: 999,
-                fromUin: 123,
-                fromUid: 'u_applicant',
-                subType: 'add',
-                message: '',
-                flag: 'add:999:u_applicant',
-            },
-        ]);
-        await bridge.onPacket({ ...selfInviteNotice(), serviceCmd: 'test.request' });
+
+        await bridge.onPacket(
+            packet({
+                contentHead: { msgType: 84, timestamp: 1 },
+                body: {
+                    msgContent: protobuf_encode<GroupJoin>({
+                        groupUin: 999,
+                        targetUid: 'u_applicant',
+                    }),
+                },
+            }),
+        );
+
         expect(fetchRequests).toHaveBeenCalledTimes(2);
-        expect(received).toEqual([
-            expect.objectContaining({ message: 'please', flag: 'slreq:1:42:999:1:0' }),
+        expect(received).toHaveLength(1);
+        const event = received[0]!;
+        expect(
+            await convertEvent(
+                {
+                    selfId: 10001,
+                    imageUrlResolver: null,
+                    mediaUrlResolver: null,
+                    messageIdResolver: null,
+                    mediaSegmentSink: null,
+                },
+                event,
+            ),
+        ).toEqual({
+            time: 1,
+            self_id: 10001,
+            post_type: 'request',
+            request_type: 'group',
+            sub_type: 'add',
+            group_id: 999,
+            user_id: 123,
+            comment: 'please',
+            flag: 'slreq:1:42:999:1:0',
+        });
+        expect(await getGroupSystemMessages(bridge, { onlyPending: true })).toEqual([
+            expect.objectContaining({
+                requester_uin: 123,
+                requester_nick: 'applicant',
+                flag: event.flag,
+            }),
         ]);
+        await handleGroupAddRequest(bridge, event.flag, true, '');
+        expect(setAddRequest).toHaveBeenCalledWith(999, 42, 1, true, '', false, undefined);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(fetchRequests).toHaveBeenCalledTimes(2);
     });

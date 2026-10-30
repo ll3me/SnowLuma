@@ -2,7 +2,7 @@
 //   subCommand 1 = main inbox, 2 = filtered (low-priority) inbox
 //
 // Current QQ uses the UIN-form envelope for the native list path, but the
-// per-user record still carries a string account on field 1. Decode both
+// per-user record may carry a numeric or string account on field 1. Decode both
 // shapes and merge so neither identifier is dropped. The UID-form request
 // remains necessary for correlating UID-only real-time pushes.
 
@@ -19,10 +19,9 @@ import type {
 import type { OidbGroupRequestList } from '@snowluma/proto-defs/oidb-actions/base';
 import { invokeOidb, type OidbSender } from '../../oidb-service';
 
-// Current QQ's EncodeOperateSysNotify maps the high-level list notification
-// type to the discriminator sent by 0x10C8. This table was read directly from
-// the current Linux client; keeping the distinction prevents list type 7
-// (join request) from being incorrectly sent back as operation type 7.
+// 0x10C0 already returns the wire discriminator consumed by 0x10C8 (1 = join,
+// 2 = self-invite, 22 = admin invitation). QQ's internal notification enum is
+// different: derive it for list consumers, never remap the wire discriminator.
 const GROUP_REQUEST_OPERATION_TYPE = new Map<number, number>([
     [0, 0],
     [1, 2],
@@ -43,21 +42,12 @@ const GROUP_REQUEST_OPERATION_TYPE = new Map<number, number>([
     [16, 8],
     [17, 100],
 ]);
-const GROUP_REQUEST_OPERATION_OUTPUT = new Set(GROUP_REQUEST_OPERATION_TYPE.values());
+const GROUP_REQUEST_NOTIFY_TYPE = new Map(
+    Array.from(GROUP_REQUEST_OPERATION_TYPE, ([notifyType, eventType]) => [eventType, notifyType]),
+);
 
-export function groupRequestOperationType(notifyType: number): number | null {
-    const mapped = GROUP_REQUEST_OPERATION_TYPE.get(notifyType);
-
-    if (mapped !== undefined) {
-        return mapped;
-    }
-
-    // Some list replies already carry the mapped discriminator (e.g. 22).
-    if (GROUP_REQUEST_OPERATION_OUTPUT.has(notifyType)) {
-        return notifyType;
-    }
-
-    return null;
+export function groupRequestNotifyType(eventType: number): number | null {
+    return GROUP_REQUEST_NOTIFY_TYPE.get(eventType) ?? null;
 }
 
 export interface DecodedGroupRequestUser {

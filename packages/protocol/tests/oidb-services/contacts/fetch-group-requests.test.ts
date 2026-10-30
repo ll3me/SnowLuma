@@ -8,7 +8,7 @@ import type { SendPacketResult } from '@snowluma/common/packet-sender';
 import {
     FetchGroupRequests,
     FetchGroupRequestsByUid,
-    groupRequestOperationType,
+    groupRequestNotifyType,
 } from '../../../src/oidb-services/contacts/fetch-group-requests';
 
 interface ObservedGroupRequestUserByUin {
@@ -49,13 +49,12 @@ function makeSender() {
 }
 
 describe('FetchGroupRequests namespace', () => {
-    it('maps native list notification types to 0x10C8 operation types', () => {
-        expect(groupRequestOperationType(1)).toBe(2);
-        expect(groupRequestOperationType(7)).toBe(1);
-        expect(groupRequestOperationType(17)).toBe(100);
-        expect(groupRequestOperationType(5)).toBe(22);
-        expect(groupRequestOperationType(22)).toBe(22);
-        expect(groupRequestOperationType(99)).toBeNull();
+    it('derives client notification types without confusing join and invite wire types', () => {
+        expect(groupRequestNotifyType(1)).toBe(7);
+        expect(groupRequestNotifyType(2)).toBe(1);
+        expect(groupRequestNotifyType(100)).toBe(17);
+        expect(groupRequestNotifyType(22)).toBe(5);
+        expect(groupRequestNotifyType(99)).toBeNull();
     });
 
     it('declares 0x10C0', () => {
@@ -130,7 +129,7 @@ describe('FetchGroupRequests namespace', () => {
                         requests: [
                             {
                                 sequence: 1_785_525_232_784_291n,
-                                eventType: 7,
+                                eventType: 1,
                                 state: 1,
                                 group: { groupUin: 1_095_186_374, groupName: 'group' },
                                 target: { uin: 1_234_567_890, name: 'requester' },
@@ -169,7 +168,7 @@ describe('FetchGroupRequests namespace', () => {
                         requests: [
                             {
                                 sequence: 99n,
-                                eventType: 5,
+                                eventType: 22,
                                 state: 1,
                                 group: { groupUin: 1001, groupName: 'group' },
                                 target: { uid: 'u_target', name: 'invitee' },
@@ -193,7 +192,7 @@ describe('FetchGroupRequests namespace', () => {
             const response = await FetchGroupRequests.invoke(sender, { filtered: false });
 
             expect(response.requests?.[0]).toMatchObject({
-                eventType: 5,
+                eventType: 22,
                 target: { uid: 'u_target', uin: 0, name: 'invitee' },
                 invitor: { uid: 'u_inviter', uin: 0, name: 'inviter' },
                 comment: 'join us',

@@ -105,9 +105,9 @@ export interface GroupRequestInfo {
     operatorName: string;
     sequence: number;
     state: number;
-    /** High-level notification type returned by the request list. */
+    /** QQ client notification type derived from the wire discriminator. */
     notifyType?: number;
-    /** 0x10C8 operation discriminator derived from notifyType. */
+    /** Wire discriminator returned by 0x10C0 and sent unchanged to 0x10C8. */
     eventType: number;
     comment: string;
     filtered: boolean;

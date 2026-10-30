@@ -394,18 +394,16 @@ describe('apis/contacts / group requests', () => {
         );
         const sendRawPacket = vi.fn(async () =>
             groupRequestPacketByUin({
-                requests: [
-                    {
-                        sequence: 1_785_525_232_784_291n,
-                        eventType: 7,
-                        state: 1,
-                        group: { groupUin: 1_095_186_374, groupName: 'group' },
-                        target: { uin: 1_234_567_890, name: 'requester' },
-                        invitor: { uin: 2_345_678_901, name: 'inviter' },
-                        operatorUser: { uin: 3_456_789_012, name: 'operator' },
-                        comment: 'please',
-                    },
-                ],
+                requests: [1, 2, 22, 7, 99].map((eventType) => ({
+                    sequence: 1_785_525_232_784_291n,
+                    eventType,
+                    state: 1,
+                    group: { groupUin: 1_095_186_374, groupName: 'group' },
+                    target: { uin: 1_234_567_890, name: 'requester' },
+                    invitor: { uin: 2_345_678_901, name: 'inviter' },
+                    operatorUser: { uin: 3_456_789_012, name: 'operator' },
+                    comment: 'please',
+                })),
             }),
         );
         const api = new ContactsApi({
@@ -415,18 +413,23 @@ describe('apis/contacts / group requests', () => {
 
         const requests = await api.fetchGroupRequests(false);
 
-        expect(requests).toEqual([
-            expect.objectContaining({
-                groupId: 1_095_186_374,
-                targetUid: 'cached_target_uid',
-                targetUin: 1_234_567_890,
-                invitorUin: 2_345_678_901,
-                operatorUin: 3_456_789_012,
-                sequence: 1_785_525_232_784_291,
-                notifyType: 7,
-                eventType: 1,
-                filtered: false,
-            }),
+        expect(requests[0]).toMatchObject({
+            groupId: 1_095_186_374,
+            targetUid: 'cached_target_uid',
+            targetUin: 1_234_567_890,
+            invitorUin: 2_345_678_901,
+            operatorUin: 3_456_789_012,
+            sequence: 1_785_525_232_784_291,
+            notifyType: 7,
+            eventType: 1,
+            filtered: false,
+        });
+        expect(requests.map(({ eventType, notifyType }) => [eventType, notifyType])).toEqual([
+            [1, 7],
+            [2, 1],
+            [22, 5],
+            [7, 10],
+            [0, 0],
         ]);
         expect(rememberGroupRequests).toHaveBeenCalledWith(requests);
     });
@@ -436,17 +439,18 @@ describe('apis/contacts / group requests', () => {
         const findUinByUid = vi.fn((uid: string) => (uid === 'target_uid' ? 1_234_567_890 : null));
         const sendRawPacket = vi.fn(async () =>
             groupRequestPacketByUid({
-                requests: [
-                    {
-                        sequence: 42n,
-                        eventType: 7,
-                        state: 1,
-                        group: { groupUin: 999, groupName: 'group' },
-                        target: { uid: 'target_uid', name: 'requester' },
-                        invitor: { uid: 'inviter_uid', name: 'inviter' },
-                        operatorUser: { uid: 'operator_uid', name: 'operator' },
+                requests: [1, 2, 22, 7, 99].map((eventType) => ({
+                    sequence: 42n,
+                    eventType,
+                    state: 1,
+                    group: { groupUin: 999, groupName: 'group' },
+                    target: {
+                        uid: eventType === 1 ? 'target_uid' : `invitee_${eventType}`,
+                        name: 'requester',
                     },
-                ],
+                    invitor: { uid: 'inviter_uid', name: 'inviter' },
+                    operatorUser: { uid: 'operator_uid', name: 'operator' },
+                })),
             }),
         );
         const api = new ContactsApi({
@@ -456,16 +460,36 @@ describe('apis/contacts / group requests', () => {
 
         const requests = await api.fetchGroupRequestsByUid(true);
 
-        expect(requests).toEqual([
-            expect.objectContaining({
-                targetUid: 'target_uid',
-                targetUin: 1_234_567_890,
-                invitorUid: 'inviter_uid',
-                operatorUid: 'operator_uid',
-                filtered: true,
-            }),
+        expect(requests[0]).toMatchObject({
+            notifyType: 7,
+            eventType: 1,
+            targetUid: 'target_uid',
+            targetUin: 1_234_567_890,
+            invitorUid: 'inviter_uid',
+            operatorUid: 'operator_uid',
+            filtered: true,
+        });
+        expect(requests.map(({ eventType, notifyType }) => [eventType, notifyType])).toEqual([
+            [1, 7],
+            [2, 1],
+            [22, 5],
+            [7, 10],
+            [0, 0],
         ]);
         expect(rememberGroupRequests).toHaveBeenCalledWith(requests);
+        expect(await api.resolveGroupJoinRequest(999, 'target_uid', 'add')).toMatchObject({
+            eventType: 1,
+        });
+        expect(
+            await api.resolveGroupJoinRequest(999, 'inviter_uid', 'invite', 'invitee_2'),
+        ).toMatchObject({ eventType: 2 });
+        expect(
+            await api.resolveGroupJoinRequest(999, 'inviter_uid', 'invite', 'invitee_22'),
+        ).toMatchObject({ eventType: 22 });
+        expect(
+            await api.resolveGroupJoinRequest(999, 'inviter_uid', 'invite', 'unrelated_uid'),
+        ).toBeNull();
+        expect(await api.resolveGroupJoinRequest(999, 'invitee_7', 'add')).toBeNull();
     });
 });
 
